@@ -11,6 +11,9 @@ export default defineConfig({
     outDir: resolve(__dirname, '../dist'),
     emptyOutDir: true,
   },
+  build: {
+    chunkSizeWarningLimit: 1600,
+  },
   server: {
     port: 5173,
     proxy: {
