@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://your-live-backend-url.com*"
+      "destination": "https://hhgoa-id-git-main-tusharsharma000005-3504s-projects.vercel.app/*"
     }
   ]
 }
