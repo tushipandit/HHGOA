@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 100" fill="none">
+  <path d="M40 95 L40 55" stroke="#0A4D4E" stroke-width="4" stroke-linecap="round"/>
+  <path d="M40 55 Q20 45 8 52 Q25 38 40 48" fill="#1B8A6B"/>
+  <path d="M40 55 Q55 35 72 42 Q52 28 40 44" fill="#1B8A6B"/>
+  <path d="M40 50 Q30 28 18 32 Q32 22 40 38" fill="#23A87A"/>
+  <path d="M40 50 Q52 25 65 30 Q48 18 40 36" fill="#23A87A"/>
+  <path d="M40 48 Q38 18 40 8 Q42 18 40 48" fill="#2ECC9A"/>
+</svg>

@@ -1,0 +1,16 @@
+# Environment and secrets
+.env
+credentials.json
+token.json
+
+# Temporary processing files (regenerated as needed)
+.tmp/*
+!.tmp/.gitkeep
+
+# Node
+node_modules/
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
