@@ -8,17 +8,25 @@ export default defineConfig({
   root: __dirname,
   publicDir: resolve(__dirname, 'public'),
   build: {
+    // Merged both build blocks into one to prevent overwriting
     outDir: resolve(__dirname, '../dist'),
     emptyOutDir: true,
-  },
-  build: {
-    chunkSizeWarningLimit: 1600,
+    chunkSizeWarningLimit: 1600, 
   },
   server: {
     port: 5173,
+    strictPort: true, // Recommended: prevents Vite from switching ports if 5173 is busy
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/share': 'http://localhost:3000',
+      // Routes frontend /api requests to http://localhost:3000/api
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
+      // Routes frontend /share requests to http://localhost:3000/share
+      '/share': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+      },
     },
   },
 });
