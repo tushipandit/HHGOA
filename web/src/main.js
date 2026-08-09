@@ -5,6 +5,7 @@ import { generateBuilderTitle } from './lib/builder-titles.js';
 import { canvasToBlob, downloadBlob } from './lib/canvas-utils.js';
 import { ACCEPTED_TYPES, loadAsset, loadImageFromFile } from './lib/image-loader.js';
 import { prefetchShareLink, shareToX } from './lib/share.js';
+import { applyPhotoEditor, createEditorState } from './lib/photo-editor.js';
 
 const app = document.getElementById('app');
 
@@ -12,6 +13,12 @@ let state = {
   mode: 'pfp',
   photo: null,
   photoFile: null,
+  editedPhoto: null,
+  editorState: createEditorState(),
+  mouseControl: 'brightness',
+  mouseDragActive: false,
+  mouseDragStartX: 0,
+  mouseDragStartValue: 0,
   name: '',
   stack: '',
   canvas: null,
@@ -26,7 +33,7 @@ app.innerHTML = `
     <header class="hero">
       <div class="hero-badge">HH GOA 2026</div>
       <h1>Frame in Goa</h1>
-      <p class="hero-sub">Upload a photo → get a branded graphic in seconds. Download or share on X.</p>
+      <p class="hero-sub">Create polished event graphics with a modern editor, smart framing, and instant exports.</p>
     </header>
 
     <div class="mode-tabs" role="tablist">
@@ -52,6 +59,76 @@ app.innerHTML = `
           <img id="upload-preview" class="upload-preview hidden" alt="Your photo preview" />
         </label>
 
+        <div class="editor-panel hidden" id="editor-panel">
+          <div class="editor-head">
+            <h3>Photo editor</h3>
+            <div class="editor-actions">
+              <button type="button" class="btn btn-link" id="btn-reset-editor">Reset</button>
+              <span>Crop, rotate, and fine-tune</span>
+            </div>
+          </div>
+          <div class="mouse-controls">
+            <div class="mouse-controls-head">
+              <span>Mouse drag</span>
+              <small>Drag on the preview to change the selected control</small>
+            </div>
+            <div class="mouse-control-chips">
+              <button type="button" class="mouse-control-chip active" data-mouse-control="brightness">Brightness</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="contrast">Contrast</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="saturation">Saturation</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="blur">Blur</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="grayscale">Grayscale</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="hue">Hue</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="rotation">Rotation</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="zoom">Zoom</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="offsetX">Shift X</button>
+              <button type="button" class="mouse-control-chip" data-mouse-control="offsetY">Shift Y</button>
+            </div>
+          </div>
+          <div class="control-group">
+            <label class="control-row">
+              <span>Rotate</span>
+              <input type="range" id="range-rotation" min="-180" max="180" value="0" />
+            </label>
+            <label class="control-row">
+              <span>Zoom</span>
+              <input type="range" id="range-zoom" min="0.8" max="2.2" step="0.01" value="1" />
+            </label>
+            <label class="control-row">
+              <span>Brightness</span>
+              <input type="range" id="range-brightness" min="50" max="150" value="100" />
+            </label>
+            <label class="control-row">
+              <span>Contrast</span>
+              <input type="range" id="range-contrast" min="50" max="150" value="100" />
+            </label>
+            <label class="control-row">
+              <span>Saturation</span>
+              <input type="range" id="range-saturation" min="0" max="200" value="100" />
+            </label>
+            <label class="control-row">
+              <span>Blur</span>
+              <input type="range" id="range-blur" min="0" max="8" step="0.1" value="0" />
+            </label>
+            <label class="control-row">
+              <span>Grayscale</span>
+              <input type="range" id="range-grayscale" min="0" max="100" value="0" />
+            </label>
+            <label class="control-row">
+              <span>Hue</span>
+              <input type="range" id="range-hue" min="-180" max="180" value="0" />
+            </label>
+            <label class="control-row">
+              <span>Shift X</span>
+              <input type="range" id="range-offsetx" min="-10" max="10" value="0" />
+            </label>
+            <label class="control-row">
+              <span>Shift Y</span>
+              <input type="range" id="range-offsety" min="-10" max="10" value="0" />
+            </label>
+          </div>
+        </div>
+
         <div class="fields card-fields hidden" id="card-fields">
           <label class="field">
             <span>Your name</span>
@@ -74,7 +151,7 @@ app.innerHTML = `
         <div class="canvas-wrap" id="canvas-wrap">
           <div class="canvas-placeholder" id="canvas-placeholder">
             <div class="placeholder-art"></div>
-            <p>Preview appears here instantly</p>
+            <p>Preview appears instantly as you style your image</p>
           </div>
           <canvas id="preview-canvas" class="hidden"></canvas>
         </div>
@@ -105,14 +182,29 @@ const els = {
   inputName: document.getElementById('input-name'),
   inputStack: document.getElementById('input-stack'),
   titlePreview: document.getElementById('title-preview'),
+  editorPanel: document.getElementById('editor-panel'),
   canvasWrap: document.getElementById('canvas-wrap'),
   canvasPlaceholder: document.getElementById('canvas-placeholder'),
   previewCanvas: document.getElementById('preview-canvas'),
   resultStatus: document.getElementById('result-status'),
   actions: document.getElementById('actions'),
+  mouseControlButtons: Array.from(document.querySelectorAll('.mouse-control-chip')),
   btnDownload: document.getElementById('btn-download'),
   btnShare: document.getElementById('btn-share'),
+  btnResetEditor: document.getElementById('btn-reset-editor'),
   modeTabs: document.querySelectorAll('.mode-tab'),
+  editorControls: {
+    rotation: document.getElementById('range-rotation'),
+    zoom: document.getElementById('range-zoom'),
+    brightness: document.getElementById('range-brightness'),
+    contrast: document.getElementById('range-contrast'),
+    saturation: document.getElementById('range-saturation'),
+    blur: document.getElementById('range-blur'),
+    grayscale: document.getElementById('range-grayscale'),
+    hue: document.getElementById('range-hue'),
+    offsetX: document.getElementById('range-offsetx'),
+    offsetY: document.getElementById('range-offsety'),
+  },
 };
 
 async function init() {
@@ -162,6 +254,24 @@ function bindEvents() {
 
   els.btnDownload.addEventListener('click', handleDownload);
   els.btnShare.addEventListener('click', handleShare);
+  els.btnResetEditor.addEventListener('click', resetEditor);
+
+  Object.entries(els.editorControls).forEach(([key, input]) => {
+    input.addEventListener('input', () => {
+      state.editorState[key] = parseFloat(input.value);
+      if (state.photo) updateEditedPhotoAndGenerate();
+    });
+  });
+
+  els.mouseControlButtons.forEach((button) => {
+    button.addEventListener('click', () => setMouseControl(button.dataset.mouseControl));
+  });
+
+  els.canvasWrap.addEventListener('pointerdown', startMouseAdjust);
+  els.canvasWrap.addEventListener('wheel', handleMouseWheel, { passive: false });
+  document.addEventListener('pointermove', updateMouseAdjust);
+  document.addEventListener('pointerup', endMouseAdjust);
+  document.addEventListener('pointercancel', endMouseAdjust);
 }
 
 function setMode(mode) {
@@ -173,6 +283,108 @@ function setMode(mode) {
   });
   els.cardFields.classList.toggle('hidden', mode !== 'card');
   if (state.photo) scheduleGenerate();
+}
+
+function setMouseControl(control) {
+  state.mouseControl = control;
+  els.mouseControlButtons.forEach((button) => {
+    button.classList.toggle('active', button.dataset.mouseControl === control);
+  });
+}
+
+function startMouseAdjust(event) {
+  if (!state.photo || event.button !== 0) return;
+  state.mouseDragActive = true;
+  state.mouseDragStartX = event.clientX;
+  state.mouseDragStartValue = getEditorValue(state.mouseControl);
+  els.canvasWrap.classList.add('dragging');
+  event.preventDefault();
+}
+
+function updateMouseAdjust(event) {
+  if (!state.mouseDragActive || !state.photo) return;
+  const deltaX = event.clientX - state.mouseDragStartX;
+  const nextValue = calculateMouseValue(state.mouseDragStartValue, deltaX, state.mouseControl, event.shiftKey);
+  applyEditorValue(state.mouseControl, nextValue);
+  event.preventDefault();
+}
+
+function endMouseAdjust(event) {
+  if (!state.mouseDragActive) return;
+  state.mouseDragActive = false;
+  els.canvasWrap.classList.remove('dragging');
+  if (event.pointerId !== undefined) {
+    els.canvasWrap.releasePointerCapture?.(event.pointerId);
+  }
+}
+
+function handleMouseWheel(event) {
+  if (!state.photo) return;
+  const delta = event.deltaY > 0 ? -0.05 : 0.05;
+  const currentZoom = getEditorValue('zoom');
+  applyEditorValue('zoom', clamp(currentZoom + delta, 0.8, 2.2));
+  event.preventDefault();
+}
+
+function getEditorValue(key) {
+  return state.editorState[key];
+}
+
+function applyEditorValue(key, rawValue) {
+  const input = els.editorControls[key];
+  if (!input) return;
+
+  const min = parseFloat(input.min);
+  const max = parseFloat(input.max);
+  const step = input.step ? parseFloat(input.step) : 1;
+  const clampedValue = clamp(rawValue, min, max);
+  const snappedValue = step > 0 ? roundToStep(clampedValue, step) : clampedValue;
+
+  state.editorState[key] = snappedValue;
+  input.value = snappedValue;
+
+  if (state.photo) {
+    updateEditedPhotoAndGenerate();
+  }
+}
+
+function calculateMouseValue(startValue, deltaX, controlKey, isFine) {
+  const input = els.editorControls[controlKey];
+  if (!input) return startValue;
+
+  const min = parseFloat(input.min);
+  const max = parseFloat(input.max);
+  const span = max - min;
+  const sensitivity = isFine ? 0.35 : 1;
+  const delta = (deltaX / 320) * span * sensitivity;
+  return clamp(startValue + delta, min, max);
+}
+
+function roundToStep(value, step) {
+  const precision = String(step).split('.')[1]?.length || 0;
+  const factor = Math.pow(10, precision);
+  return Math.round(value * factor) / factor;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+async function resetEditor() {
+  state.editorState = createEditorState();
+  Object.entries(els.editorControls).forEach(([key, input]) => {
+    input.value = state.editorState[key];
+  });
+  if (state.photo) {
+    state.editedPhoto = await applyPhotoEditor(state.photo, state.editorState);
+    scheduleGenerate();
+  }
+}
+
+async function updateEditedPhotoAndGenerate() {
+  if (!state.photo) return;
+  state.editedPhoto = await applyPhotoEditor(state.photo, state.editorState);
+  scheduleGenerate();
 }
 
 let generateTimer;
@@ -200,11 +412,17 @@ async function handleFile(file) {
     state.photo = await loadImageFromFile(file);
     state.photoFile = file;
     state.shareMeta = null;
+    state.editorState = createEditorState();
+    Object.entries(els.editorControls).forEach(([key, input]) => {
+      input.value = state.editorState[key];
+    });
 
     showUploadPreview(state.photo);
     els.uploadPreview.classList.remove('hidden');
     els.dropzoneInner.classList.add('hidden');
+    els.editorPanel.classList.remove('hidden');
 
+    state.editedPhoto = await applyPhotoEditor(state.photo, state.editorState);
     await generate();
   } catch (err) {
     console.error(err);
@@ -218,12 +436,13 @@ async function generate() {
   els.resultStatus.textContent = 'Generating…';
 
   try {
+    const sourcePhoto = state.editedPhoto || state.photo;
     let canvas;
     if (state.mode === 'pfp') {
-      canvas = await generatePfpFrame(state.photo, assets);
+      canvas = await generatePfpFrame(sourcePhoto, assets);
     } else {
       canvas = await generateIdCard(
-        state.photo,
+        sourcePhoto,
         { name: state.name, stack: state.stack },
         assets
       );
